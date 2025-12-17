@@ -1,0 +1,476 @@
+\documentclass[sigconf,nonacm]{acmart}
+
+% -------------------------------------------------
+% Metadata
+% -------------------------------------------------
+\title{Exploring Adaptive Frequency Hopping in Bluetooth Low Energy}
+
+\author{Hayden Fuller}
+\affiliation{
+  \institution{Rensselaer Polytechnic Institute}
+  \country{USA}
+}
+\author{Anthony Frias}
+\affiliation{
+  \institution{Rensselaer Polytechnic Institute}
+  \country{USA}
+}
+
+\date{December 15, 2025}
+
+% -------------------------------------------------
+% Packages
+% -------------------------------------------------
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{subcaption}
+
+% -------------------------------------------------
+% Bibliography
+% -------------------------------------------------
+\bibliographystyle{ACM-Reference-Format}
+
+% -------------------------------------------------
+\begin{document}
+\maketitle
+
+% -------------------------------------------------
+\begin{abstract}
+This project aims to model and simulate Bluetooth Low Energy (BLE) and how it employs Adaptive Frequency Hopping (AFH) to improve robustness against interference in the heavily congested 2.4 GHz ISM band. BLE is widely used in low-power applications such as wearables, medical devices, and IoT nodes. However, its operation in the 2.4 GHz band exposes it to heavy interference from various wireless technologies, namely Wi-Fi, Bluetooth, and Zigbee. AFH enhances BLE’s coexistence capabilities by detecting busy channels and dynamically avoiding them. By simulating AFH, we aim to understand its effectiveness in maintaining performance and reducing packet loss in the presence of interference, thus contributing to the design of more reliable wireless communication systems. The primary goal is to analyze how AFH improves communication robustness in interference-prone environments. Using a MATLAB-based simulation framework, we model BLE frequency hopping and evaluate multiple AFH classifiers that leverage packet failure statistics, energy measurements, and decision mechanisms. This work provides practical insight into AFH behavior and contributes to the design of more reliable low-power wireless systems operating in interference-prone spectrum. 
+\end{abstract}
+
+% -------------------------------------------------
+\section{Introduction}
+
+\subsection{Motivation}
+Bluetooth Low Energy (BLE) has become a foundational wireless technology for low-power communication in the 2.4 GHz industrial, scientific, and medical (ISM) band. Its adoption spans a wide range of applications, from the obvious WiFi and Bluetooth, to Internet of Things (IoT) devices, wearable electronics, industrial sensing, medical monitoring, consumer peripherals, cordless phones, and even microwave oven interference. Many of these applications impose increasingly strict requirements on reliability, latency, and energy efficiency, particularly as BLE is used in closed-loop control systems, real-time sensing, and continuous data streaming scenarios.
+
+Interference in this band is both spatially and temporally variable, ranging from continuous high-power transmissions to bursty and intermittent interference patterns. As a result, BLE links are often exposed to packet losses, retransmissions, and unpredictable latency spikes that can severely degrade application-level performance.
+
+To mitigate interference, BLE employs Adaptive Frequency Hopping (AFH) across 37 data channels, which allows a device to exclude channels that exhibit poor quality. However, while the BLE specification defines the mechanisms for channel hopping and channel map updates, it leaves the design of the channel classification algorithm largely implementation-specific. Consequently, the effectiveness of AFH depends heavily on how channel quality is measured, interpreted, and acted upon by the underlying classifier.
+
+
+\subsection{Problem Statement}
+The core problem addressed in this work is the design and evaluation of effective channel classification strategies for BLE Adaptive Frequency Hopping under diverse interference conditions. While frequency hopping provides inherent resilience against interference, naïve or poorly tuned classification algorithms can significantly limit its benefits.
+
+Specifically, channel classifiers must operate under several competing constraints. They must react quickly to interference to avoid repeated packet failures, yet remain stable enough to avoid excessive oscillation between good and bad channel states. They must distinguish between transient packet losses and persistent interference, and they must avoid over-aggressive channel exclusion that reduces hop diversity and risks channel starvation. Furthermore, classifiers must operate using limited information, typically relying on packet success statistics, received signal strength or energy measurements, or some combination thereof.
+
+Existing BLE implementations often rely on simple heuristics such as fixed packet error rate (PER) thresholds or coarse energy detection, which can perform poorly in realistic environments. For example, packet-based classifiers may react too slowly to strong continuous interferers, while energy-based classifiers may falsely exclude channels that exhibit high energy but still support successful communication. These limitations motivate a systematic exploration of alternative classification strategies and their tradeoffs.
+
+
+\subsection{Prior Work and Challenges}
+Prior research on BLE coexistence and adaptive frequency hopping has explored a range of approaches to channel quality estimation and interference mitigation. Several studies have investigated packet error rate–based blacklisting mechanisms, where channels are excluded once their observed failure rate exceeds a predefined threshold \citep{al_kalaa2014, tosireview2017, bluetooth_spec_5}
+. While these methods are simple to implement and directly reflect link performance, they are sensitive to bursty interference and may require large observation windows to avoid false positives.
+
+Other works have focused on energy- or RSSI-based interference detection, leveraging spectrum sensing or clear channel assessment techniques to identify channels with elevated interference levels \citep{pang2021, silabs_afh_latest, ble_primer}
+. These approaches can detect high-power interferers more rapidly than packet-based methods, but they may misclassify channels when elevated energy does not translate into packet failures.
+
+Hybrid approaches that combine multiple metrics, such as packet outcomes and physical-layer energy measurements, have been proposed to address these shortcomings \citep{pang2021, al_kalaa2014}
+. However, designing such systems remains challenging due to the need for appropriate normalization, weighting, and smoothing of signals. Additionally, many prior studies either rely on proprietary hardware implementations or lack sufficient detail for reproducibility, making direct comparison difficult.
+
+Overall, channel classification for BLE AFH remains a difficult problem due to the dynamic nature of interference, the limited observability of the wireless channel, and the tight constraints on complexity and power consumption in low-energy devices.
+
+
+
+\subsection{Key Ideas and Approach}
+At a high level, we design and evaluate five channel classification algorithms: (1) a baseline with no channel classification, (2) a fixed-window packet failure rate classifier, (3) an exponentially weighted moving average (EWMA)–based failure classifier, (4) an energy-based classifier using per-channel interference measurements, and (5) a combined classifier that uses packet failure statistics and energy measurements through EWMA filtering. These algorithms span a spectrum of complexity and aggressiveness, enabling a systematic comparison of their behavior under varying interference scenarios.
+
+Several practical challenges are explicitly addressed in the design. First, hysteresis and recovery mechanisms are incorporated to prevent rapid oscillations between channel states. Second, by BLE specification, a minimum-channel constraint is enforced to ensure that sufficient hop diversity is maintained even in highly interfered environments. Finally, all classifiers are implemented within a common simulation framework to enable fair comparison and reproducibility.
+
+
+\subsection{Summary of Results and Contributions}
+The primary contributions of this work are threefold. First, we present a modular and reproducible simulation framework for evaluating BLE AFH channel classification algorithms under controlled interference models. Second, we provide a quantitative comparison of multiple classification strategies across key performance metrics, including packet loss rate, throughput, and latency distributions (including tail latency). Third, we demonstrate that a combined EWMA-based classifier incorporating both packet failure statistics and energy measurements consistently outperforms simpler approaches across a range of interference conditions.
+
+Our results show that hybrid classification can significantly reduce packet loss and tail latency while avoiding the instability and channel starvation issues observed in more aggressive single-metric classifiers. These findings provide practical insights into the design of AFH classifiers and highlight the importance of multi-metric, temporally smoothed decision making in interference-limited wireless systems.
+
+
+% -------------------------------------------------
+\section{Background and Related Work}
+
+\subsection{Bluetooth Low Energy and Adaptive Frequency Hopping}
+Bluetooth Low Energy (BLE) is a wireless communication protocol designed for low-power, short-range connectivity, operating in the unlicensed 2.4 GHz ISM band. BLE divides this band into 40 channels with a spacing of 2 MHz, consisting of 3 advertising channels and 37 data channels. During a connection, data packets are transmitted using Adaptive Frequency Hopping across the data channels to mitigate interference and multipath fading \citep{bluetooth_spec_5, ble_primer}.
+
+As opposed to more basic frequency hopping,  Adaptive Frequency Hopping (AFH), enables devices to dynamically exclude channels that exhibit poor quality. AFH operates by maintaining a channel map that marks each data channel as either usable or unusable. While the BLE specification defines the signaling mechanisms for channel map updates and the channel selection algorithms used to compute hop sequences, it does not dictate how channel quality should be measured or how channels should be classified as good or bad \citep{bluetooth_spec_5}. As a result, the design of channel classification algorithms is largely left to implementers.
+
+The BLE specification defines two channel selection algorithms. Channel Selection Algorithm #1 uses a simple modulo-based hopping mechanism, while Channel Selection Algorithm #2 introduces a more complex pseudo random approach that improves channel usage uniformity and resilience to channel map changes \citep{mathworks_ch_sel, al_kalaa2014}. Regardless of the selection algorithm used, AFH performance is fundamentally limited by the accuracy and stability of the underlying channel classification process.
+
+
+\subsection{Interference in the 2.4~GHz ISM Band}
+The 2.4 GHz ISM band is shared by a wide range of wireless technologies, including Wi-Fi (IEEE 802.11), Zigbee, proprietary radios, and non-communication devices such as microwave ovens. Interference in this band is highly heterogeneous, varying in bandwidth, duty cycle, power level, and temporal characteristics. For BLE devices, such interference can manifest as increased packet error rates, retransmissions, and latency variability \citep{mathworks_interference, tosireview2017}.
+
+Several studies have characterized the impact of Wi-Fi interference on BLE performance, demonstrating that both continuous and bursty interferers can severely degrade link reliability depending on channel overlap and timing \citep{tosireview2017}. Narrowband interferers may affect only a subset of BLE channels, while wideband interferers such as Wi-Fi transmissions can simultaneously impact multiple channels. These effects complicate channel quality estimation, as short-term packet failures may not accurately reflect long-term channel usability.
+Energy measurements such as received signal strength indicator (RSSI) or energy detection (ED) are often used to assess interference levels. However, elevated energy does not always correspond to packet failure, particularly when interferers are asynchronous or spectrally narrow relative to the BLE channel bandwidth \citep{mathworks_interference, silabs_afh_latest}. This disconnect motivates the need for classification strategies that combine multiple indicators of channel quality.
+
+
+\subsection{Packet-Based Channel Classification}
+A common approach to BLE channel classification is to rely on packet-level statistics, such as packet error rate (PER) or acknowledgment failure counts. In these schemes, a channel is marked as bad when its observed failure rate exceeds a predefined threshold over a fixed observation window \citep{silabs_afh_latest, argenox_best_practices}. Packet-based classifiers are attractive due to their simplicity and direct relationship to link performance.
+
+However, prior work has shown that packet-based approaches suffer from several limitations. First, they are sensitive to the choice of window size: small windows enable faster reaction but increase susceptibility to transient losses, while large windows improve stability at the cost of slower response \citep{tosireview2017}. Second, packet-based classifiers may respond too slowly to strong continuous interferers, as sufficient packet failures must be observed before a channel is excluded. Finally, bursty interference can cause temporary spikes in failure rate that lead to premature channel exclusion.
+
+Simulation studies of BLE channel selection algorithms, such as the work by Al Kalaa and Refai, have highlighted the importance of accurate channel quality estimation in achieving reliable performance under interference \citep{al_kalaa2014}. These findings underscore the need for more nuanced classification mechanisms that can balance responsiveness and stability.
+
+\subsection{Energy-Based and Interference-Aware Classification}
+To address the limitations of packet-based methods, several works have explored energy-based or interference-aware channel classification techniques. These approaches use physical-layer measurements, such as RSSI or channel energy, to detect the presence of interferers independently of packet decoding outcomes \citep{pang2021, mathworks_interference}. By identifying channels with persistently elevated energy levels, energy-based classifiers can react quickly to high-power interferers.
+
+Pang et al. propose an interference awareness scheme that incorporates energy detection into the BLE channel selection process, demonstrating improved connection robustness in the presence of Wi-Fi interference \citep{pang2021}. Their results show that incorporating interference measurements can reduce packet loss and improve throughput compared to purely packet-based approaches.
+
+Despite these advantages, energy-based classifiers are prone to false positives, particularly when elevated energy does not result in packet corruption. This can lead to unnecessary channel exclusion and reduced hop diversity. Additionally, energy thresholds must be carefully calibrated to account for environmental noise and device-specific characteristics \citep{silabs_afh_latest}.
+
+\subsection{Hybrid and Adaptive Classification Methods}
+Recognizing the complementary strengths and weaknesses of packet-based and energy-based approaches, recent work has explored hybrid classification strategies that combine multiple metrics. These methods often employ filtering techniques such as exponentially weighted moving averages (EWMA) to smooth noisy measurements and stabilize classification decisions \citep{pang2021, tosireview2017}.
+
+Hybrid approaches aim to detect interference early using energy measurements while validating channel quality through packet outcomes. However, designing effective fusion mechanisms remains challenging due to the need for appropriate normalization, weighting, and hysteresis. Furthermore, many existing studies focus on specific interference scenarios or hardware platforms, limiting their generality and reproducibility.
+
+In contrast, this work evaluates multiple classification strategies within a unified simulation framework, enabling a controlled comparison of packet-based, energy-based, and hybrid approaches under diverse interference models. By systematically analyzing their performance tradeoffs, this study seeks to provide practical guidance for the design of robust BLE AFH classifiers.
+
+
+% -------------------------------------------------
+\section{Design}
+This section describes the overall design of the BLE Adaptive Frequency Hopping (AFH) classification framework evaluated in this work. We first present the system architecture and design principles, followed by a detailed description of the channel classification algorithms considered.
+
+
+\subsection{System Architecture}
+The proposed system models a BLE link employing Adaptive Frequency Hopping over the 37 BLE data channels. At a high level, the AFH process operates as a closed-loop control system, in which channel quality observations are continuously collected and used to update a channel map that influences future channel selection decisions.
+
+Figure~\ref{fig:afh_architecture} illustrates the overall BLE AFH system architecture.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figure1.png}
+  \caption{BLE Adaptive Frequency Hopping (AFH) system architecture showing
+  channel selection, interference, observation, classification, and channel map
+  feedback.}
+  \label{fig:afh_architecture}
+\end{figure}
+
+Figure~\ref{fig:afh_architecture} illustrates the overall architecture of the system. For each transmitted packet, the following sequence of operations occurs:
+
+\begin{enumerate}
+  \item A data channel is selected using the BLE channel selection algorithm based on the current channel map.
+  \item The packet is transmitted, and the outcome (success or failure) is observed.
+  \item Physical-layer measurements, such as per-channel energy or RSSI, are recorded when available.
+  \item The channel classification algorithm updates its internal state based on these observations.
+  \item The channel map is updated to reflect the current set of usable channels.
+\end{enumerate}
+
+This feedback loop enables the system to adapt to time-varying interference while maintaining compliance with the BLE specification.
+
+\subsection{Design Principles}
+Several guiding principles inform the design of the channel classification algorithms evaluated in this work.
+
+Responsiveness vs. Stability:
+Channel classifiers must react quickly to persistent interference to avoid repeated packet losses. However, overly aggressive classification can lead to frequent channel map changes and oscillatory behavior. To balance these competing goals, several classifiers incorporate temporal smoothing mechanisms and hysteresis in their decision rules.
+
+Multi-Metric Observation:
+No single metric fully captures channel quality in realistic wireless environments. Packet failures reflect actual link impact but may lag the onset of interference, while energy measurements can detect interference early but may not correlate directly with packet corruption. The design therefore explores classifiers that leverage both packet-level and physical-layer metrics.
+
+Recovery and Hysteresis:
+To prevent rapid toggling of channel states, all classifiers incorporate explicit recovery mechanisms. Channels marked as bad must satisfy both temporal and quality-based conditions before being re-enabled. This hysteresis improves stability and reduces unnecessary channel map churn.
+
+Minimum Channel Availability:
+The BLE specification recommends maintaining a minimum number of usable data channels to preserve hop diversity. To enforce this constraint, the system ensures that the number of enabled channels never falls below a configurable minimum. If necessary, channels with the best observed quality metrics are forcibly re-enabled.
+
+
+\subsection{Channel Classification Algorithms}
+This work evaluates five channel classification algorithms, ranging from a baseline with no classification to a combined multi-metric approach. All classifiers operate on a per-channel basis and update their state periodically based on accumulated observations.
+
+\subsubsection{Algorithm 0: No Classification (Baseline)}
+The baseline algorithm performs no channel classification. All data channels remain marked as usable throughout the simulation, regardless of observed packet outcomes or interference measurements. This configuration isolates the effects of basic frequency hopping alone and serves as a reference point for evaluating the benefits of adaptive channel exclusion.
+
+\subsubsection{Algorithm 1: Fixed-Window Failure Rate Classification}
+The fixed-window classifier evaluates channel quality based on packet outcomes observed over a fixed number of transmission attempts. For each channel, the number of successful and failed transmissions is tracked over a predefined window size. At the end of each window, the failure fraction is computed as the ratio of failed transmissions to total attempts. 
+
+A channel is marked as bad if its failure fraction exceeds a predefined threshold. Once marked as bad, the channel remains excluded for a minimum recovery duration, after which it may be reconsidered for inclusion.
+
+This approach is simple and directly reflects link performance but is sensitive to the choice of window size and threshold, particularly in the presence of bursty interference.
+
+\subsubsection{Algorithm 2: EWMA-Based Failure Fraction Classification}
+To improve stability over the fixed-window approach, the EWMA-based classifier applies exponential smoothing to the observed failure fraction. At the end of each observation window, the measured failure fraction is incorporated into an exponentially weighted moving average for each channel.
+
+Channels are classified as bad when their smoothed failure metric exceeds a threshold. Recovery requires both a sufficient reduction in the smoothed metric and a minimum number of consecutive windows exhibiting acceptable performance.
+
+By weighting recent observations more heavily than older ones, this approach reduces sensitivity to transient losses while maintaining reasonable responsiveness to persistent interference.
+
+\subsubsection{Algorithm 3: Energy-Based Channel Classification}
+The energy-based classifier evaluates channel quality using physical-layer energy measurements. For each channel, a short history of recent energy samples is maintained, and a robust statistic, such as the median, is computed to estimate the channel’s interference level.
+
+Channels whose estimated energy exceeds a predefined threshold are marked as bad. To prevent oscillations, a hysteresis margin and recovery counter are employed, requiring sustained low-energy observations before re-enabling a channel.
+
+This approach enables rapid detection of high-power interferers but may misclassify channels when elevated energy does not lead to packet failures.
+
+\subsubsection{Algorithm 4: Combined Failure and Energy-Based Classification}
+The combined classifier integrates both packet-level failure statistics and energy measurements into a unified decision metric. For each channel, the observed failure fraction and normalized energy estimate are linearly combined using a configurable weighting factor. The resulting composite metric is then filtered using an EWMA to produce a smoothed channel quality score.
+
+Channels are marked as bad when their composite score exceeds a threshold. Recovery follows similar hysteresis and timing constraints as the EWMA-based classifier. Additionally, a minimum channel availability constraint is enforced by re-enabling the best-scoring channels when necessary.
+
+This hybrid approach leverages the complementary strengths of packet-based and energy-based metrics, enabling both rapid interference detection and robust validation of actual link impact.
+
+\subsection{Parameterization and Tunability}
+All classification algorithms expose tunable parameters, including observation window sizes, thresholds, smoothing factors, and recovery times. These parameters allow the classifiers to be tailored to different interference environments and application requirements.
+
+Rather than optimizing parameters for a single scenario, this work evaluates classifiers using representative parameter values chosen to highlight their qualitative behavior and tradeoffs. A detailed summary of parameter values is provided in the Implementation section to enable full reproducibility.
+
+\subsection{Summary}
+The design presented in this section provides a flexible framework for evaluating BLE AFH channel classification strategies. By incorporating multiple observation metrics, temporal smoothing, and stability mechanisms, the framework enables a systematic exploration of the tradeoffs inherent in adaptive channel selection under interference.
+
+
+% -------------------------------------------------
+\section{Implementation}
+This section describes the implementation of the BLE Adaptive Frequency Hopping (AFH) simulation framework used to evaluate the proposed channel classification algorithms. The goal of the implementation is to provide a controllable, reproducible environment for comparing AFH strategies under a variety of interference conditions while remaining faithful to the Bluetooth Low Energy specification.
+
+\subsection{Simulation Platform}
+MATLAB Online R2025b was used.
+All experiments were conducted using a custom discrete-event simulation implemented in MATLAB online 25.2.0.3055257 (R2025b) Update 2. The simulator models a single BLE connection operating in the 2.4 GHz ISM band and supports configurable channel selection algorithms, channel classification strategies, and interference profiles.
+
+The simulation operates at the granularity of BLE connection events. During each event, a data packet is transmitted on a selected channel, and the outcome of the transmission is recorded. The simulator maintains per-channel state, including packet statistics and energy measurements, which are updated after each event.
+
+To ensure repeatability, all simulations are initialized using a fixed random seed.
+
+
+\subsection{BLE Link and PHY Modeling}
+The simulated BLE link follows the Bluetooth 5 specification for data channel operation. The system models 37 data channels with a spacing of 2 MHz, indexed from 0 to 36.
+
+The simulator supports both BLE Channel Selection Algorithm #1 and #2, as defined in the Bluetooth specification. For smaller experiments in this work (~2000 packets), Channel Selection Algorithm #1 was used, for larger ones (~20000 packets) Algorithm #2 was used.
+
+Channel selection uses the current channel map produced by the AFH classifier, ensuring that only channels marked as usable are eligible for selection.
+Each connection event results in the transmission of a single data packet. Packet success or failure is determined by comparing the instantaneous signal-to-interference-plus-noise ratio (SINR) against a demodulation threshold derived from BLE modulation characteristics.
+Packet failures are recorded on a per-channel basis and form the primary input to packet-based classification algorithms.
+
+
+\subsection{Interference Modeling}
+Interference is modeled as additive energy on selected channels and can be configured to represent a variety of real-world sources operating in the 2.4 GHz ISM band.
+The simulator supports multiple interferer types, including:
+\begin{itemize}
+  \setlength{\itemsep}{0pt}
+  \setlength{\topsep}{2pt}
+  \item Static interferers, which continuously occupy a fixed set of channels
+  \item Periodic interferers, which activate and deactivate at fixed intervals
+  \item Bursty interferers, which introduce intermittent high-power interference
+\end{itemize}
+Each interferer is parameterized by center frequency, bandwidth, duty cycle, and relative power level. Interference energy is accumulated on a per-channel basis and contributes to both packet corruption and energy measurements used by the AFH classifier.
+
+
+\subsection{Observation and Measurement Collection}
+For each channel, the simulator maintains a set of observation metrics that are updated after every transmission attempt:
+\begin{itemize}
+  \setlength{\itemsep}{0pt}
+  \setlength{\topsep}{2pt}
+  \item Packet success and failure counts
+  \item Estimated channel energy or RSSI
+  \item Time since last transmission on the channel
+\end{itemize}
+Energy measurements are aggregated using a sliding window or robust statistic (e.g., median) to reduce sensitivity to outliers. These measurements form the input to energy-based and combined classification algorithms.
+
+
+\subsection{AFH Classification Implementation}
+All channel classification algorithms described in Section 3 are implemented within a unified framework. Each algorithm operates independently on each data channel and updates its state at fixed evaluation intervals.
+Failure-Based Classifiers: For Algorithms 1 and 2, packet outcomes are accumulated over fixed-length observation windows. Algorithm 2 applies an exponential weighted moving average (EWMA) to the measured failure fraction to improve temporal stability.
+Energy-Based Classifier: Algorithm 3 evaluates per-channel energy measurements against a predefined threshold. A hysteresis margin and recovery counter are applied to prevent rapid toggling between good and bad states.
+Combined Classifier: Algorithm 4 computes a composite channel quality score by linearly combining normalized failure and energy metrics. The combined score is filtered using an EWMA before classification decisions are made.
+For all classifiers, a minimum channel availability constraint is enforced. If the number of usable channels falls below the minimum threshold, channels with the best quality metrics are re-enabled to maintain hop diversity.
+
+
+\subsection{Baselines and Comparison Configurations}
+To isolate the impact of channel classification, the following baseline configurations are evaluated:
+\begin{itemize}
+  \setlength{\itemsep}{0pt}
+  \setlength{\topsep}{2pt}
+  \item No AFH (Algorithm 0): All channels permanently enabled
+  \item Failure-only AFH: Windowed and EWMA-based classifiers
+  \item Energy-only AFH: Energy threshold classifier
+  \item Combined AFH: Joint failure and energy classifier
+\end{itemize}
+All configurations share identical channel selection, interference models, and traffic patterns, ensuring that observed performance differences are attributable solely to the classification strategy.
+
+
+\subsection{Reproducibility}
+The simulation code and configuration files will be made available in a public GitHub repository. All simulation parameters, including random seeds, classifier thresholds, window sizes, and interference configurations, are explicitly specified. The simulator is deterministic given a fixed seed, enabling exact reproduction of results.
+
+
+% -------------------------------------------------
+\section{Evaluation}
+This section evaluates the performance of the proposed AFH channel classification algorithms under identical interference and traffic conditions. We compare five configurations: a baseline with no classification and four increasingly sophisticated classifiers. Performance is evaluated using retransmission rate, throughput, and latency metrics, with results supported by both summary statistics and time-series visualizations.
+
+Unless otherwise stated, all experiments use BLE Channel Selection Algorithm #2 with identical interference realizations and simulation seeds to ensure fair comparison.
+
+\subsection{Evaluation Metrics}
+The following metrics are used to quantify system performance:
+\begin{itemize}
+  \setlength{\itemsep}{0pt}
+  \setlength{\topsep}{2pt}
+  \item Retransmission Ratio: Ratio of retransmitted packets to total packets sent.
+  \item Throughput: Successfully delivered application-layer bits per second.
+  \item Latency: End-to-end packet latency measured per connection event.
+  \item Latency Distribution: Evaluated using CDFs and percentile-based plots (p95, p99, max).
+  \item Channel Utilization Dynamics: Visualized via channel index versus event plots.
+\end{itemize}
+These metrics jointly capture both efficiency and reliability under interference.
+
+
+\subsection{Baseline: No Classification}
+Expectation: Without channel classification, the system relies solely on pseudo-random hopping to mitigate interference. While this provides frequency diversity, it does not actively avoid persistently interfered channels. As a result, moderate retransmission rates and elevated tail latency are expected.
+
+Results: The baseline configuration achieves successful delivery of all 20,000 packets but incurs 1,089 retransmissions, corresponding to a retransmission ratio of 5.4\%. Median latency remains low at 7.5 ms; however, tail latency is significant, with p95 and p99 both reaching 15 ms and a maximum observed latency of 30 ms. Throughput is limited to approximately 20.2 kbps due to frequent retransmissions.
+
+Discussion: The Channels vs. Events plot shows uniform channel usage, including channels heavily affected by interference. The Retransmissions per Packet plot exhibits clustering consistent with repeated collisions on bad channels. This baseline confirms that hopping alone is insufficient in interference-dominated environments.
+
+
+\subsection{Failure-Based Classification}
+Expectation: Failure-based classifiers should gradually identify poor channels and reduce retransmissions. However, detection is inherently delayed, as failures must be observed before action can be taken. EWMA smoothing (Algorithm 2) is expected to improve stability relative to fixed windows.
+
+Results: Algorithm 1 (fixed-window) reduces retransmissions slightly to 1,040 (5.2\%), while Algorithm 2 (EWMA) yields 1,071 retransmissions (5.4\%), comparable to baseline. Throughput improvements are marginal, and median latency remains unchanged at 7.5 ms. Tail latency improves modestly for Algorithm 1 (p95 = 7.5 ms), but both approaches still experience elevated p99 and maximum latency values up to 37.5 ms.
+
+Discussion: The Latency CDF reveals a small leftward shift relative to baseline, indicating limited tail improvement. However, Channels vs. Events plots show delayed and inconsistent channel exclusion, particularly under bursty interference.
+
+These results highlight a fundamental limitation of failure-only AFH: by the time sufficient failures are observed, significant performance degradation has already occurred.
+
+
+\subsection{Energy-Based Classification}
+Expectation: Energy-based classification is expected to detect interference earlier than failure-based approaches, enabling faster channel exclusion and reduced retransmissions. However, false positives may occur when elevated energy does not translate into packet loss.
+
+Results: Algorithm 3 significantly outperforms all prior configurations. Retransmissions drop to 342, corresponding to a retransmission ratio of 1.7\%. Throughput increases to approximately 21.0 kbps, and tail latency improves substantially, with p95 reduced to 7.5 ms and maximum latency limited to 22.5 ms. Median latency remains unchanged, indicating that improvements primarily affect tail behavior.
+
+Discussion: The Channels vs. Events visualization shows rapid and sustained exclusion of interfered channels. Correspondingly, Retransmissions per Packet plots show a marked reduction in clustered retransmissions.
+
+These results demonstrate that physical-layer awareness enables faster and more effective AFH decisions than packet-based feedback alone.
+
+
+\subsection{Combined Classification}
+Expectation: The combined classifier is designed to leverage the early detection capability of energy measurements while validating channel quality using packet outcomes. This hybrid approach is expected to minimize both retransmissions and latency.
+
+Results: Algorithm 4 achieves dramatic performance improvements. Retransmissions are nearly eliminated, with only 22 retransmissions observed (0.1\%). Median and p95 latency collapse to 0 ms, while p99 and maximum latency remain below 7.5 ms. Reported throughput increases sharply to over 1 Mbps.
+
+Discussion: The Latency vs. Percentile plot shows a steep drop-off, indicating near-deterministic packet delivery. Channels vs. Events plots reveal aggressive but stable channel exclusion, with the system rapidly converging to a small set of high-quality channels.
+
+However, the exceptionally high throughput and zero-latency results also reveal a limitation of the simulation model. Specifically, aggressive channel exclusion combined with idealized timing assumptions can lead to unrealistically favorable conditions that may not fully reflect real-world BLE constraints, such as connection event timing granularity and controller-level scheduling delays.
+
+These results should therefore be interpreted as an upper bound on achievable performance rather than a guaranteed real-world outcome.
+
+
+
+\subsection{Comparative Summary}
+Overall trends across all configurations are consistent:
+\begin{itemize}
+  \setlength{\itemsep}{0pt}
+  \setlength{\topsep}{2pt}
+  \item Failure-only classification provides limited benefit due to delayed feedback.
+  \item Energy-based classification significantly reduces retransmissions and tail latency.
+  \item Combined classification yields the best performance but risks over-optimistic results if not carefully constrained.
+\end{itemize}
+
+The evaluation demonstrates that incorporating physical-layer awareness into AFH classification substantially improves BLE robustness under interference, particularly for latency-sensitive applications.
+
+
+\subsection{Limitations}
+While the combined classifier performs best in simulation, its aggressiveness may reduce channel diversity and resilience to rapidly changing interference. Additionally, energy measurements are hardware-dependent and may not be uniformly available across BLE implementations.
+
+Finally, the simulation assumes perfect channel state reporting and instantaneous channel map enforcement, which may overestimate achievable gains in real devices.
+
+
+\subsection{Reproducibility}
+All results are generated using fixed random seeds and identical interference configurations. Summary statistics and figures are produced directly from the simulation output. Key parameters, including thresholds and update intervals, are provided in the Implementation section to enable full reproduction.
+
+
+% -------------------------------------------------
+\section{Results Figures}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{MCS0_Events.png}
+  \caption{Channels versus events for baseline AFH configuration.}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{MCS1_Events.png}
+  \caption{Channels versus events for fixed window failure rate.}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{MCS2_Events.png}
+  \caption{Channels versus events for EWMA.}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{MCS3_Events.png}
+  \caption{Channels versus events for energy based/RSSI.}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{MCS4_Events.png}
+  \caption{Channels versus events for combined EWMA+energy based/RSSI.}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{MCS3_Retransmissions.png}
+  \caption{Retransmissions per packet under energy-based AFH classification.}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{MCS4_LatencyCDF.png}
+  \caption{Latency CDF for .}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{MCS4_LatencyPercent.png}
+  \caption{Latency versus percentile for combined AFH classification.}
+\end{figure}
+
+\begin{table*}[t]
+  \centering
+  \caption{Summary of BLE AFH performance metrics for channel classification Algorithms~0--4 using pseudo-random channel selection.}
+  \label{tab:afh_summary}
+  \begin{tabular}{lcccccc}
+    \toprule
+    \textbf{Algorithm} &
+    \textbf{Retrans.} &
+    \textbf{Retrans. Ratio} &
+    \textbf{Throughput (bps)} &
+    \textbf{p95 Lat. (ms)} &
+    \textbf{p99 Lat. (ms)} &
+    \textbf{max Lat. (ms)} \\
+    \midrule
+    0: None (Baseline)          & 1089 & 0.054 & 20{,}762 & 15.00 & 15.00 & 30.00\\
+    1: Fixed-Window Failure     & 1040 & 0.052 & 20{,}765 & 7.50  & 15.00 & 37.50\\
+    2: EWMA Failure Fraction   & 1071 & 0.054 & 20{,}762 & 15.00 & 15.00 & 37.50\\
+    3: Energy-Based             & 342  & 0.017 & 21{,}480 & 7.50  & 15.00 & 22.50\\
+    4: Combined (EWMA+Energy)  & 22   & 0.001 & 21{,}824 & 0.00  & 7.50  & 7.50\\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+
+
+% -------------------------------------------------
+\section{Conclusion and Future Work}
+
+This work presented a systematic evaluation of Adaptive Frequency Hopping (AFH) channel classification strategies for Bluetooth Low Energy under interference. Using a reproducible simulation framework, we compared failure-based, energy-based, and combined classification algorithms while holding channel selection, traffic patterns, and interference conditions constant.
+
+The results demonstrate that packet failure statistics alone provide limited benefit due to delayed feedback, particularly in bursty interference environments. In contrast, energy-based classification enables rapid detection of interfered channels and significantly reduces retransmissions and tail latency. The combined failure and energy-based classifier achieves the best overall performance in simulation, nearly eliminating retransmissions and producing highly deterministic latency behavior. These findings highlight the importance of incorporating physical-layer awareness into AFH decision-making for latency-sensitive BLE applications.
+
+At the same time, the evaluation reveals important tradeoffs between responsiveness, stability, and channel diversity. Aggressive channel exclusion can yield dramatic gains under stable interference conditions but may reduce robustness in dynamic environments if not carefully constrained. These observations motivate several promising directions for future work.
+
+\subsection{Future Work}
+Weighted Channel Map Algorithms: The current AFH framework treats channels as binary states (good or bad). A natural extension is the use of weighted channel maps, where channels are assigned continuous quality scores rather than hard classifications. Channel selection could then preferentially select higher-quality channels while still occasionally probing lower-quality ones to maintain situational awareness and enable recovery.
+
+Predictive Channel Classification: All classifiers evaluated in this work are reactive, relying on past observations to inform future decisions. Future work could explore predictive AFH algorithms that anticipate interference based on observed temporal patterns, such as periodic interferers or repeating channel occupancy. Even short-term prediction could reduce classification latency and further lower retransmission rates.
+
+Self-Tuning Classification Parameters: Classifier performance is sensitive to parameters such as thresholds, window sizes, and smoothing factors. Rather than fixing these values a priori, future algorithms could employ self-tuning mechanisms that adapt parameters online based on observed traffic load, interference volatility, and performance targets (e.g., latency vs. throughput).
+
+Machine Learning–Based AFH: More advanced approaches could apply machine learning techniques to channel classification, using features such as packet outcomes, energy measurements, and temporal statistics. Lightweight models, such as online clustering or reinforcement learning, may be particularly well-suited for resource-constrained BLE devices. However, the computational and energy overhead of such methods must be carefully evaluated.
+
+Power Consumption Analysis: This study focuses on performance metrics such as retransmissions, throughput, and latency. An important extension is a detailed analysis of power consumption, as AFH decisions directly affect radio on-time, retransmissions, and scanning behavior. Understanding the energy–performance tradeoff is critical for battery-powered BLE devices.
+
+Real-World Experimental Validation: Finally, while simulation enables controlled and repeatable evaluation, real-world experiments are essential to validate practical applicability. Future work will focus on implementing selected classifiers on commercial BLE hardware and evaluating performance in realistic environments with Wi-Fi and other ISM-band interferers. Such experiments would capture hardware non-idealities, measurement noise, and controller-level constraints not modeled in simulation.
+
+% -------------------------------------------------
+\bibliography{sample-base}
+
+\end{document}
